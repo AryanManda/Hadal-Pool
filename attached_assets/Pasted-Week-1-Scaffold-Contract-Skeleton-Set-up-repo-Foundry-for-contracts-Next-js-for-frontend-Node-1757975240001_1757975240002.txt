@@ -1,0 +1,89 @@
+Week 1: Scaffold & Contract Skeleton
+Set up repo (Foundry for contracts, Next.js for frontend, Node.js for indexer/relayer).
+
+
+Write base Mixer.sol with deposit() + withdraw() placeholders.
+
+
+Add Ownable, Pausable, ReentrancyGuard (OpenZeppelin).
+
+
+Deploy on local testnet (Anvil).
+
+
+Deliverable: Local chain demo: deposit → locked → withdraw (no delay logic yet).
+
+Week 2: Add Time Lock & Pools
+Implement per-pool configuration: Pool A (6h), Pool B (24h), Pool C (72h).
+
+
+Store the deposit timestamp/block in mapping.
+
+
+Enforce block.timestamp >= depositTime + poolDelay.
+
+
+Write Foundry tests for delay enforcement.
+
+
+Deliverable: Contracts that enforce time-locked withdrawals per pool on Sepolia.
+
+Week 3: Fees & Privacy Fund
+Add a fee parameter (e.g., 0.3%) on deposits or withdrawals.
+
+
+Route fees into a privacy fund.
+
+
+Implement a function to view fund balance (future redistribution).
+
+
+Test fee deduction logic.
+
+
+Deliverable: Verified fee logic on Sepolia, balances tracked correctly.
+
+Week 4: Frontend Integration
+Build Deposit UI (connect wallet → pick pool → deposit).
+
+
+Build Withdraw UI (select eligible pool, fresh address, claim after delay).
+
+
+Show a countdown timer until funds are withdrawable.
+
+
+Warn if the pool has a low anonymity set.
+
+
+Deliverable: Working dApp where users can deposit & see a countdown until eligible to withdraw.
+
+Week 5: Relayer & Security Checks
+Implement a basic relayer (Node.js) to submit withdrawal transactions on behalf of users.
+
+
+Add max deposit size, max pool size in the contract.
+
+
+Internal audit + fuzz tests for reentrancy/double-withdraw.
+
+
+Deliverable: Relayer-enabled withdrawals, contracts tested for abuse scenarios.
+
+Week 6: Testnet Beta & Audit Prep
+Deploy 3 pools on Sepolia(eth test network) (6h, 24h, 72h delays).
+
+
+Invite test users to try deposits/withdrawals.
+
+
+Collect feedback on UX/privacy score.
+
+
+Prepare audit request (scope: deposits, withdrawals, timelock, fees, relayer).
+
+
+Deliverable: Testnet beta live with documentation + audit-ready code.
+
+
+

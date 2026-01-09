@@ -1,0 +1,16 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "GeneratedWallet",
+  "sourceName": "contracts/upgradeable/PrivacyMixerV1.sol",
+  "abi": [
+    {
+      "inputs": [],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    }
+  ],
+  "bytecode": "0x6080604052348015600f57600080fd5b50603f80601d6000396000f3fe6080604052600080fdfea2646970667358221220b12b64e593e0a520a2f37a653a24bb8171d7c7aa0cc7f64369219744634ad92e64736f6c634300081c0033",
+  "deployedBytecode": "0x6080604052600080fdfea2646970667358221220b12b64e593e0a520a2f37a653a24bb8171d7c7aa0cc7f64369219744634ad92e64736f6c634300081c0033",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}

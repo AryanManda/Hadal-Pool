@@ -20,26 +20,57 @@ export interface IStorage {
     anonymitySetChange: number;
     feeAmount: number;
   }): Promise<void>;
+  
+  // Reset
+  reset(): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<string, User>;
   private deposits: Map<string, Deposit>;
-  private poolStats: PoolStats;
+  private poolStats: Map<string, PoolStats>; // Track stats per currency
 
   constructor() {
     this.users = new Map();
     this.deposits = new Map();
+    this.poolStats = new Map();
     
-    // Initialize pool stats
-    this.poolStats = {
+    // Initialize pool stats for different currencies
+    this.poolStats.set("ETH", {
       id: randomUUID(),
       currency: "ETH",
       totalLiquidity: "124.5",
       anonymitySetSize: 47,
       privacyFundBalance: "2.34",
       updatedAt: new Date(),
-    };
+    });
+    
+    this.poolStats.set("USDC", {
+      id: randomUUID(),
+      currency: "USDC",
+      totalLiquidity: "45000",
+      anonymitySetSize: 23,
+      privacyFundBalance: "135",
+      updatedAt: new Date(),
+    });
+    
+    this.poolStats.set("WBTC", {
+      id: randomUUID(),
+      currency: "WBTC",
+      totalLiquidity: "2.5",
+      anonymitySetSize: 12,
+      privacyFundBalance: "0.075",
+      updatedAt: new Date(),
+    });
+    
+    this.poolStats.set("USDT", {
+      id: randomUUID(),
+      currency: "USDT",
+      totalLiquidity: "38000",
+      anonymitySetSize: 18,
+      privacyFundBalance: "114",
+      updatedAt: new Date(),
+    });
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -104,8 +135,21 @@ export class MemStorage implements IStorage {
     return updatedDeposit;
   }
 
-  async getPoolStats(): Promise<PoolStats> {
-    return this.poolStats;
+  async getPoolStats(currency?: string): Promise<PoolStats> {
+    // If currency specified, return stats for that currency
+    if (currency) {
+      const stats = this.poolStats.get(currency);
+      if (stats) return stats;
+    }
+    // Default to ETH if no currency specified or not found
+    return this.poolStats.get("ETH") || {
+      id: randomUUID(),
+      currency: "ETH",
+      totalLiquidity: "0",
+      anonymitySetSize: 0,
+      privacyFundBalance: "0",
+      updatedAt: new Date(),
+    };
   }
 
   async updatePoolStats(update: {
@@ -114,16 +158,71 @@ export class MemStorage implements IStorage {
     anonymitySetChange: number;
     feeAmount: number;
   }): Promise<void> {
-    const currentLiquidity = parseFloat(this.poolStats.totalLiquidity);
-    const currentFund = parseFloat(this.poolStats.privacyFundBalance);
+    // Get or create stats for this currency
+    let stats = this.poolStats.get(update.currency);
+    if (!stats) {
+      stats = {
+        id: randomUUID(),
+        currency: update.currency,
+        totalLiquidity: "0",
+        anonymitySetSize: 0,
+        privacyFundBalance: "0",
+        updatedAt: new Date(),
+      };
+    }
 
-    this.poolStats = {
-      ...this.poolStats,
+    const currentLiquidity = parseFloat(stats.totalLiquidity);
+    const currentFund = parseFloat(stats.privacyFundBalance);
+
+    const updatedStats: PoolStats = {
+      ...stats,
       totalLiquidity: (currentLiquidity + update.liquidityChange).toFixed(8),
-      anonymitySetSize: Math.max(0, this.poolStats.anonymitySetSize + update.anonymitySetChange),
+      anonymitySetSize: Math.max(0, stats.anonymitySetSize + update.anonymitySetChange),
       privacyFundBalance: (currentFund + update.feeAmount).toFixed(8),
       updatedAt: new Date(),
     };
+
+    this.poolStats.set(update.currency, updatedStats);
+  }
+
+  // Reset all test data
+  async reset(): Promise<void> {
+    this.deposits.clear();
+    this.users.clear();
+    // Reset pool stats to initial state for all currencies
+    this.poolStats.clear();
+    this.poolStats.set("ETH", {
+      id: randomUUID(),
+      currency: "ETH",
+      totalLiquidity: "124.5",
+      anonymitySetSize: 47,
+      privacyFundBalance: "2.34",
+      updatedAt: new Date(),
+    });
+    this.poolStats.set("USDC", {
+      id: randomUUID(),
+      currency: "USDC",
+      totalLiquidity: "45000",
+      anonymitySetSize: 23,
+      privacyFundBalance: "135",
+      updatedAt: new Date(),
+    });
+    this.poolStats.set("WBTC", {
+      id: randomUUID(),
+      currency: "WBTC",
+      totalLiquidity: "2.5",
+      anonymitySetSize: 12,
+      privacyFundBalance: "0.075",
+      updatedAt: new Date(),
+    });
+    this.poolStats.set("USDT", {
+      id: randomUUID(),
+      currency: "USDT",
+      totalLiquidity: "38000",
+      anonymitySetSize: 18,
+      privacyFundBalance: "114",
+      updatedAt: new Date(),
+    });
   }
 }
 

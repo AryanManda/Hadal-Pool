@@ -43,8 +43,9 @@ app.use((req, res, next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
+    log(`Error: ${message}`, "error");
     res.status(status).json({ message });
-    throw err;
+    // Don't throw - just log the error to prevent server crashes
   });
 
   // importantly only setup vite in development and after
@@ -61,11 +62,20 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
+  server.listen(port, "localhost", () => {
     log(`serving on port ${port}`);
+  });
+
+  // Handle uncaught exceptions to prevent crashes
+  process.on('uncaughtException', (error) => {
+    log(`Uncaught Exception: ${error.message}`, "error");
+    console.error(error);
+    // Don't exit - keep server running
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    log(`Unhandled Rejection at: ${promise}, reason: ${reason}`, "error");
+    console.error('Unhandled Rejection:', reason);
+    // Don't exit - keep server running
   });
 })();

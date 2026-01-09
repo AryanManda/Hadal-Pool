@@ -16,7 +16,7 @@ export const deposits = pgTable("deposits", {
   amount: decimal("amount", { precision: 18, scale: 8 }).notNull(),
   transactionHash: text("transaction_hash").notNull(),
   depositTime: timestamp("deposit_time").notNull().defaultNow(),
-  lockDuration: integer("lock_duration").notNull().default(86400), // 24 hours in seconds
+  lockDuration: integer("lock_duration").notNull().default(3600), // 1 hour in seconds
   isWithdrawn: boolean("is_withdrawn").notNull().default(false),
   withdrawnAt: timestamp("withdrawn_at"),
   withdrawAddress: text("withdraw_address"),

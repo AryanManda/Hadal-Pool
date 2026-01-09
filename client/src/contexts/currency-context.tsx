@@ -1,0 +1,33 @@
+import { createContext, useContext, useState, ReactNode } from "react";
+
+const CURRENCIES = ["ETH", "USDC", "WBTC", "USDT"] as const;
+type Currency = typeof CURRENCIES[number];
+
+interface CurrencyContextType {
+  selectedCurrency: Currency;
+  setSelectedCurrency: (currency: Currency) => void;
+}
+
+const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
+
+export function CurrencyProvider({ children }: { children: ReactNode }) {
+  const [selectedCurrency, setSelectedCurrency] = useState<Currency>("ETH");
+
+  return (
+    <CurrencyContext.Provider value={{ selectedCurrency, setSelectedCurrency }}>
+      {children}
+    </CurrencyContext.Provider>
+  );
+}
+
+export function useCurrency() {
+  const context = useContext(CurrencyContext);
+  if (context === undefined) {
+    throw new Error("useCurrency must be used within a CurrencyProvider");
+  }
+  return context;
+}
+
+export type { Currency };
+export { CURRENCIES };
+

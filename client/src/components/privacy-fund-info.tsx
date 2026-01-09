@@ -12,27 +12,30 @@ export default function PrivacyFundInfo() {
     <div className="mt-8 glass-effect rounded-xl p-6">
       <h3 className="text-lg font-semibold mb-4 flex items-center space-x-2">
         <i className="fas fa-piggy-bank text-accent"></i>
-        <span>Privacy Fund</span>
+        <span>Hadal Fund</span>
       </h3>
       <div className="grid md:grid-cols-2 gap-6">
         <div>
           <p className="text-sm text-muted-foreground mb-4">
-            0.3% of all deposits contribute to the Privacy Fund, which is used to:
+            The Hadal Fund ensures your privacy and security by:
           </p>
           <ul className="text-sm text-muted-foreground space-y-1">
             <li className="flex items-center space-x-2">
               <i className="fas fa-check text-primary text-xs"></i>
-              <span>Incentivize liquidity providers</span>
+              <span>Protecting your deposits with enhanced security measures</span>
             </li>
             <li className="flex items-center space-x-2">
               <i className="fas fa-check text-primary text-xs"></i>
-              <span>Fund protocol development</span>
+              <span>Maintaining protocol stability for reliable withdrawals</span>
             </li>
             <li className="flex items-center space-x-2">
               <i className="fas fa-check text-primary text-xs"></i>
-              <span>Enhance privacy research</span>
+              <span>Growing the anonymity set for better privacy protection</span>
             </li>
           </ul>
+          <p className="text-xs text-muted-foreground mt-4 italic">
+            Only 1.5% of deposits go to the fund, ensuring maximum value for you
+          </p>
         </div>
         <div className="text-right">
           <div className="text-3xl font-bold text-accent mb-2" data-testid="text-fund-balance">

@@ -3,8 +3,10 @@ declare global {
     ethereum?: {
       request: (args: { method: string; params?: any[] }) => Promise<any>;
       isMetaMask?: boolean;
+      isPhantom?: boolean;
       selectedAddress?: string;
       chainId?: string;
+      providers?: any[];
     };
   }
 }

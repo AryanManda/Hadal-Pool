@@ -1,0 +1,11 @@
+# Cloudflare Pages configuration
+# This file tells Cloudflare Pages to serve static files, not deploy as a Worker
+
+pages_build_output_dir = "dist/public"
+
+[build]
+command = "npm run build"
+
+[build.environment_variables]
+NODE_VERSION = "22"
+

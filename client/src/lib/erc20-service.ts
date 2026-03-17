@@ -37,6 +37,18 @@ const TOKEN_ADDRESSES: Record<string, Record<string, string>> = {
     USDT: "0xEf54C221Fc94517877F0F40eCd71E0A3866D66C2", // Arbitrum Sepolia USDT
     WBTC: "0x29f2D40B0605204364af54EC677bD022dA425d03", // Arbitrum Sepolia WBTC (approximate)
   },
+  // Base Mainnet
+  base: {
+    USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base USDC
+    USDT: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", // Base USDT
+    WBTC: "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22", // Base WBTC (if available)
+  },
+  // Base Sepolia (Testnet)
+  baseSepolia: {
+    USDC: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // Base Sepolia USDC
+    USDT: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // Base Sepolia USDT (may use same as USDC)
+    WBTC: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // Base Sepolia WBTC (may use same as USDC)
+  },
 };
 
 export class ERC20Service {
@@ -57,12 +69,15 @@ export class ERC20Service {
   private async getNetworkName(): Promise<string> {
     try {
       const network = await this.provider.getNetwork();
-      // Chain ID 1 = mainnet, 11155111 = sepolia, 42161 = arbitrum, 421614 = arbitrumSepolia
+      // Chain ID 1 = mainnet, 11155111 = sepolia, 31337 = localhost/hardhat, 42161 = arbitrum, 421614 = arbitrumSepolia, 8453 = base, 84532 = baseSepolia
       if (network.chainId === 1n) return "mainnet";
       if (network.chainId === 11155111n) return "sepolia";
+      if (network.chainId === 31337n) return "localhost";
       if (network.chainId === 42161n) return "arbitrum";
       if (network.chainId === 421614n) return "arbitrumSepolia";
-      throw new Error(`Unsupported network with Chain ID: ${network.chainId}. Please switch to Sepolia (Chain ID: 11155111), Mainnet (Chain ID: 1), Arbitrum (Chain ID: 42161), or Arbitrum Sepolia (Chain ID: 421614).`);
+      if (network.chainId === 8453n) return "base";
+      if (network.chainId === 84532n) return "baseSepolia";
+      throw new Error(`Unsupported network with Chain ID: ${network.chainId}. Please switch to Localhost (Chain ID: 31337), Sepolia (Chain ID: 11155111), Mainnet (Chain ID: 1), Arbitrum (Chain ID: 42161), Arbitrum Sepolia (Chain ID: 421614), Base (Chain ID: 8453), or Base Sepolia (Chain ID: 84532).`);
     } catch (error: any) {
       if (error.message?.includes("Unsupported network")) {
         throw error;

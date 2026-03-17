@@ -11,7 +11,8 @@ import CountdownTimer from "@/components/countdown-timer";
 import GeneratedWalletComponent from "@/components/generated-wallet";
 import { WalletGenerator } from "@/lib/wallet-generator";
 import { ContractService } from "@/lib/contract-service";
-import { getMetaMaskProvider } from "@/lib/wallet-utils";
+import { ZKService } from "@/lib/zk-service";
+import type { Eip1193Provider } from "@/lib/wallet-utils";
 import { ethers } from "ethers";
 import type { Deposit } from "@shared/schema";
 
@@ -20,7 +21,8 @@ export default function WithdrawCard() {
   const [freshWalletPrivateKey, setFreshWalletPrivateKey] = useState<string | null>(null);
   const [useRelayer, setUseRelayer] = useState(true);
   const [selectedDeposit, setSelectedDeposit] = useState<string | null>(null);
-  const { address } = useWallet();
+  const [secretNoteInput, setSecretNoteInput] = useState("");
+  const { address, provider: connectedProvider } = useWallet();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -45,10 +47,8 @@ export default function WithdrawCard() {
   const withdrawMutation = useMutation({
     mutationFn: async (data: { depositId: string; withdrawAddress: string; useRelayer: boolean }) => {
       // First, call the smart contract to actually withdraw funds
-      const ethereumProvider = getMetaMaskProvider();
-      if (!ethereumProvider) {
-        throw new Error("MetaMask not found. Please install MetaMask.");
-      }
+      const ethereumProvider: Eip1193Provider | null = connectedProvider;
+      if (!ethereumProvider) throw new Error("Wallet provider not available. Please reconnect your wallet.");
 
       const provider = new ethers.BrowserProvider(ethereumProvider);
       const signer = await provider.getSigner();
@@ -119,31 +119,101 @@ export default function WithdrawCard() {
       const balanceBeforeEth = ethers.formatEther(balanceBefore);
       console.log(`Balance of ${data.withdrawAddress} before withdrawal:`, balanceBeforeEth, "ETH");
 
-      // Withdraw from smart contract
-      console.log(`Withdrawing ${withdrawAmount} ETH to ${data.withdrawAddress}`);
-      console.log(`User address: ${userAddress}`);
-      console.log(`Deposit amount in contract: ${userDepositInfo.depositAmount} ETH`);
+      // Check if this is a ZK deposit (has stored commitment)
+      const zkDepositKey = `zk_deposit_${deposit.transactionHash}`;
+      const storedZKData = localStorage.getItem(zkDepositKey);
       
       let receipt;
-      try {
-        receipt = await contractService.withdraw(data.withdrawAddress, withdrawAmount);
-      } catch (withdrawError: any) {
-        // Check if it's a time lock error
-        if (withdrawError.message?.includes("Lock period not expired") || 
-            withdrawError.message?.includes("lock period") ||
-            withdrawError.reason?.includes("Lock period not expired")) {
-          throw new Error("Lock period has not expired yet. Please wait 1 minute after deposit before withdrawing.");
+      
+      // Try ZK withdrawal if we have a saved secret note/commitment (either pasted or stored)
+      if (secretNoteInput.trim() || storedZKData) {
+        try {
+          const zkData = storedZKData ? JSON.parse(storedZKData) : null;
+          const noteOrCommitment = secretNoteInput.trim() || zkData?.note || zkData?.commitment;
+          if (!noteOrCommitment) throw new Error("Missing secret note/commitment");
+
+          console.log("ZK deposit found, using ZK withdrawal for privacy...");
+          console.log("Note/Commitment:", noteOrCommitment);
+          
+          // Get pool info to get lock duration
+          const poolInfo = await contractService.getPoolInfo(zkData?.poolId ?? 0);
+          const lockDuration = Number(poolInfo.lockDuration);
+          
+          // Generate ZK proof
+          console.log("Generating ZK proof...");
+          const amountWei = ethers.parseEther(withdrawAmount).toString();
+          const zkProof = await ZKService.generateProof(
+            noteOrCommitment,
+            data.withdrawAddress,
+            amountWei,
+            lockDuration
+          );
+          
+          console.log("ZK proof generated:", zkProof);
+          console.log("Nullifier:", zkProof.nullifier);
+          
+          // Check if contract supports V2 withdrawal
+          const iface = contractService.getContract().interface;
+          let supportsV2 = false;
+          try {
+            const functionFragment = iface.getFunction("withdrawWithProof");
+            if (functionFragment) {
+              supportsV2 = true;
+            }
+          } catch {
+            supportsV2 = false;
+          }
+          
+          if (supportsV2) {
+            console.log("Using ZK withdrawal (V2 contract)...");
+            receipt = await contractService.withdrawWithProof(
+              zkProof.proof,
+              zkProof.nullifier,
+              zkProof.commitment,
+              zkProof.recipient,
+              withdrawAmount
+            );
+            console.log("✅ ZK withdrawal successful! Privacy maintained - no link to deposit.");
+            
+            // Remove stored ZK data after successful withdrawal
+            localStorage.removeItem(zkDepositKey);
+            setSecretNoteInput("");
+          } else {
+            console.warn("Contract doesn't support ZK withdrawal (V1). Falling back to regular withdrawal.");
+            throw new Error("V1 contract - use regular withdrawal");
+          }
+        } catch (zkError: any) {
+          console.warn("ZK withdrawal failed, falling back to regular withdrawal:", zkError.message);
+          // Fall through to regular withdrawal
         }
+      }
+      
+      // Regular withdrawal (V1 or ZK fallback)
+      if (!receipt) {
+        console.log(`Withdrawing ${withdrawAmount} ETH to ${data.withdrawAddress} (V1 mode)`);
+        console.log(`User address: ${userAddress}`);
+        console.log(`Deposit amount in contract: ${userDepositInfo.depositAmount} ETH`);
         
-        // Check if it's an RPC error
-        if (withdrawError.code === "INTERNAL_ERROR" || 
-            withdrawError.message?.includes("Internal JSON-RPC") ||
-            withdrawError.message?.includes("RPC")) {
-          throw new Error(`RPC Error: ${withdrawError.message}. Please ensure you're connected to Sepolia or Mainnet.`);
+        try {
+          receipt = await contractService.withdraw(data.withdrawAddress, withdrawAmount);
+        } catch (withdrawError: any) {
+          // Check if it's a time lock error
+          if (withdrawError.message?.includes("Lock period not expired") || 
+              withdrawError.message?.includes("lock period") ||
+              withdrawError.reason?.includes("Lock period not expired")) {
+            throw new Error("Lock period has not expired yet. Please wait 1 minute after deposit before withdrawing.");
+          }
+          
+          // Check if it's an RPC error
+          if (withdrawError.code === "INTERNAL_ERROR" || 
+              withdrawError.message?.includes("Internal JSON-RPC") ||
+              withdrawError.message?.includes("RPC")) {
+            throw new Error(`RPC Error: ${withdrawError.message}. Please ensure you're connected to the correct network.`);
+          }
+          
+          // Re-throw with original message
+          throw withdrawError;
         }
-        
-        // Re-throw with original message
-        throw withdrawError;
       }
       
       console.log("Withdrawal transaction receipt:", receipt);
@@ -296,7 +366,7 @@ export default function WithdrawCard() {
       
       // Try to switch MetaMask to the withdrawal address
       try {
-        const ethereumProvider = getMetaMaskProvider();
+        const ethereumProvider: Eip1193Provider | null = connectedProvider;
         if (ethereumProvider) {
           // Request MetaMask to switch to the withdrawal address
           // Note: MetaMask doesn't support programmatic account switching,
@@ -577,6 +647,20 @@ export default function WithdrawCard() {
             />
             <Label htmlFor="useRelayer" className="font-medium text-sm">Use Relayer Service</Label>
           </div>
+        </div>
+
+        {/* Secret Note (optional) */}
+        <div className="rounded-lg border border-border bg-muted/30 p-4">
+          <Label className="block text-sm font-medium mb-2">Secret Note (optional)</Label>
+          <div className="text-xs text-muted-foreground mb-3">
+            If you saved a Secret Note from your deposit, paste it here to enable private ZK withdrawal even if you switched devices or cleared browser storage.
+          </div>
+          <textarea
+            value={secretNoteInput}
+            onChange={(e) => setSecretNoteInput(e.target.value)}
+            placeholder="pm2:..."
+            className="w-full min-h-[72px] rounded-md border border-border bg-background p-3 text-xs font-mono"
+          />
         </div>
 
         {/* Withdraw Button */}

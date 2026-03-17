@@ -3,10 +3,12 @@ pragma solidity ^0.8.22;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 contract PrivacyMixerV1 is 
     Initializable, 
-    OwnableUpgradeable
+    OwnableUpgradeable,
+    ReentrancyGuardUpgradeable
 {
     // Storage variables
     mapping(address => address) public userToGeneratedAddress;
@@ -51,6 +53,7 @@ contract PrivacyMixerV1 is
      */
     function initialize() public initializer {
         __Ownable_init(msg.sender);
+        __ReentrancyGuard_init();
         
         // Initialize default pools with actual durations
         _createPool(3600, 10 ether, 15);   // 1 hour (3600 seconds) - 1.5% fee
@@ -157,7 +160,7 @@ contract PrivacyMixerV1 is
     /**
      * Withdraw function
      */
-    function withdraw(address to, uint256 amount) external whenNotPaused {
+    function withdraw(address to, uint256 amount) external whenNotPaused nonReentrant {
         require(addressGenerated[msg.sender], "No generated address");
         require(_canWithdraw(msg.sender), "Lock period not expired");
         require(to != address(0), "Invalid address");

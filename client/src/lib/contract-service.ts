@@ -30,7 +30,12 @@ export class ContractService {
     
       if (!contractAddress) {
         // Provide helpful error message based on detected network
-        if (network === "mainnet") {
+        if (network === "localhost") {
+          throw new Error(
+            "Contract not deployed on localhost. " +
+            "Please deploy the contract first: npx hardhat run scripts/deploy.cjs --network hardhat"
+          );
+        } else if (network === "mainnet") {
           throw new Error(
             "Contract not deployed on Ethereum Mainnet. " +
             "Please deploy the contract to Mainnet first, or switch to Sepolia testnet (Chain ID: 11155111) for testing."
@@ -50,6 +55,16 @@ export class ContractService {
           throw new Error(
             "Contract not deployed on Arbitrum Sepolia testnet. " +
             "Please deploy the contract to Arbitrum Sepolia (Chain ID: 421614) first."
+          );
+        } else if (network === "base") {
+          throw new Error(
+            "Contract not deployed on Base Mainnet. " +
+            "Please deploy the contract to Base (Chain ID: 8453) first."
+          );
+        } else if (network === "baseSepolia") {
+          throw new Error(
+            "Contract not deployed on Base Sepolia testnet. " +
+            "Please deploy the contract to Base Sepolia (Chain ID: 84532) first."
           );
         } else {
           throw new Error(`Contract not deployed on ${network}. Please switch to a supported network.`);
@@ -92,13 +107,16 @@ export class ContractService {
   private async getNetworkName(): Promise<string> {
     try {
       const network = await this.provider.getNetwork();
-      // Chain ID 1 = mainnet, 11155111 = sepolia, 42161 = arbitrum, 421614 = arbitrumSepolia
+      // Chain ID 1 = mainnet, 11155111 = sepolia, 31337 = localhost/hardhat, 42161 = arbitrum, 421614 = arbitrumSepolia, 8453 = base, 84532 = baseSepolia
       if (network.chainId === 1n) return "mainnet";
       if (network.chainId === 11155111n) return "sepolia";
+      if (network.chainId === 31337n) return "localhost";
       if (network.chainId === 42161n) return "arbitrum";
       if (network.chainId === 421614n) return "arbitrumSepolia";
+      if (network.chainId === 8453n) return "base";
+      if (network.chainId === 84532n) return "baseSepolia";
       // Unsupported network
-      throw new Error(`Unsupported network with Chain ID: ${network.chainId}. Please switch to Sepolia (Chain ID: 11155111), Mainnet (Chain ID: 1), Arbitrum (Chain ID: 42161), or Arbitrum Sepolia (Chain ID: 421614).`);
+      throw new Error(`Unsupported network with Chain ID: ${network.chainId}. Please switch to Localhost (Chain ID: 31337), Sepolia (Chain ID: 11155111), Mainnet (Chain ID: 1), Arbitrum (Chain ID: 42161), Arbitrum Sepolia (Chain ID: 421614), Base (Chain ID: 8453), or Base Sepolia (Chain ID: 84532).`);
     } catch (error: any) {
       if (error.message?.includes("Unsupported network")) {
         throw error;
@@ -459,6 +477,206 @@ export class ContractService {
   async getOwner(): Promise<string> {
     await this.ensureInitialized();
     return await this.contract.owner();
+  }
+
+  /**
+   * Deposit with ZK commitment (V2 - Maximum Privacy)
+   * @param poolId Pool ID to deposit into
+   * @param commitment Commitment hash (computed off-chain)
+   * @param amount Amount in ETH (for transaction value)
+   */
+  async depositWithCommitment(
+    poolId: PoolId,
+    commitment: string,
+    amount: string
+  ): Promise<ethers.TransactionReceipt> {
+    await this.ensureInitialized();
+    
+    if (!this.signer) {
+      throw new Error("Signer required for deposits");
+    }
+
+    // Verify contract exists
+    try {
+      const code = await this.provider.getCode(this.contractAddress);
+      if (code === "0x" || code === "0x0") {
+        throw new Error(
+          `No contract found at address ${this.contractAddress}. ` +
+          `Please deploy the contract first. If using Base Sepolia, make sure the contract address is set in contracts.ts`
+        );
+      }
+    } catch (codeError: any) {
+      if (codeError.message?.includes("No contract found")) {
+        throw codeError;
+      }
+      console.warn("Could not check contract code:", codeError);
+    }
+
+    // Check if contract is initialized
+    try {
+      const totalPools = await this.contract.totalPools();
+      if (totalPools === 0n) {
+        throw new Error("Contract has no pools. Please call initialize() on the contract first.");
+      }
+    } catch (initError: any) {
+      if (initError.message?.includes("Contract has no pools")) {
+        throw initError;
+      }
+      throw new Error(
+        `Contract may not be initialized. Please call initialize() on the contract at ${this.contractAddress}`
+      );
+    }
+
+    // Check if contract supports V2 function (depositWithCommitment)
+    // If not, fall back to regular deposit (V1)
+    let supportsV2 = false;
+    try {
+      // Check if function exists in the contract interface
+      const iface = this.contract.interface;
+      try {
+        const functionFragment = iface.getFunction("depositWithCommitment");
+        if (functionFragment) {
+          supportsV2 = true;
+        }
+      } catch {
+        // Function doesn't exist in ABI - use V1
+        supportsV2 = false;
+      }
+    } catch {
+      // Error checking - assume V1
+      supportsV2 = false;
+    }
+
+    // If V2 not supported, fall back to regular deposit
+    if (!supportsV2) {
+      console.warn("Contract doesn't support depositWithCommitment (V1 contract). Falling back to regular deposit.");
+      return await this.deposit(poolId, amount);
+    }
+
+    // V2 path - use depositWithCommitment
+    // Convert commitment to bytes32 if needed
+    let commitmentBytes32: string;
+    if (commitment.startsWith("0x") && commitment.length === 66) {
+      commitmentBytes32 = commitment;
+    } else if (commitment.length === 64) {
+      commitmentBytes32 = `0x${commitment}`;
+    } else {
+      // Pad to 64 hex chars (32 bytes)
+      const cleaned = commitment.replace("0x", "");
+      commitmentBytes32 = `0x${cleaned.padStart(64, "0").slice(0, 64)}`;
+    }
+
+    // Validate pool
+    const poolInfo = await this.contract.getPoolInfo(poolId);
+    if (!poolInfo.active) {
+      throw new Error(`Pool ${poolId} is not active`);
+    }
+
+    const amountWei = ethers.parseEther(amount);
+    if (amountWei < ethers.parseEther("0.1")) {
+      throw new Error("Minimum deposit is 0.1 ETH");
+    }
+    if (amountWei > poolInfo.maxDeposit) {
+      throw new Error(`Amount exceeds maximum deposit of ${ethers.formatEther(poolInfo.maxDeposit)} ETH`);
+    }
+
+    // Check if commitment already exists
+    try {
+      const exists = await this.contract.commitmentExists(commitmentBytes32);
+      if (exists) {
+        throw new Error("This commitment already exists. Please create a new commitment.");
+      }
+    } catch (checkError: any) {
+      // If commitmentExists doesn't exist (V1), skip this check
+      if (checkError.message?.includes("commitment already exists")) {
+        throw checkError;
+      }
+      console.warn("Could not check commitment existence (V1 contract):", checkError.message);
+    }
+
+    // Execute the transaction
+    const tx = await this.contract.depositWithCommitment(
+      poolId,
+      commitmentBytes32,
+      { value: amountWei }
+    );
+    const receipt = await tx.wait();
+    
+    if (receipt.status !== 1) {
+      throw new Error(`Deposit transaction failed with status: ${receipt.status}`);
+    }
+    
+    return receipt;
+  }
+
+  /**
+   * Withdraw using ZK proof (V2 - Maximum Privacy)
+   * @param proof ZK proof (encoded)
+   * @param nullifier Nullifier hash
+   * @param commitment Commitment hash
+   * @param recipient Recipient address
+   * @param amount Amount to withdraw
+   */
+  async withdrawWithProof(
+    proof: {
+      pi_a: [string, string, string];
+      pi_b: [[string, string], [string, string], [string, string]];
+      pi_c: [string, string, string];
+    },
+    nullifier: string,
+    commitment: string,
+    recipient: string,
+    amount: string
+  ): Promise<ethers.TransactionReceipt> {
+    await this.ensureInitialized();
+    
+    if (!this.signer) {
+      throw new Error("Signer required for withdrawals");
+    }
+
+    // Encode proof for contract
+    const proofEncoded = ethers.AbiCoder.defaultAbiCoder().encode(
+      ["uint256[2]", "uint256[2][2]", "uint256[2]"],
+      [
+        [proof.pi_a[0], proof.pi_a[1]],
+        [
+          [proof.pi_b[0][0], proof.pi_b[0][1]],
+          [proof.pi_b[1][0], proof.pi_b[1][1]],
+        ],
+        [proof.pi_c[0], proof.pi_c[1]],
+      ]
+    );
+
+    const tx = await this.contract.withdrawWithProof(
+      proofEncoded,
+      nullifier,
+      commitment,
+      recipient,
+      ethers.parseEther(amount)
+    );
+    const receipt = await tx.wait();
+    
+    if (receipt.status !== 1) {
+      throw new Error(`Withdrawal transaction failed with status: ${receipt.status}`);
+    }
+    
+    return receipt;
+  }
+
+  /**
+   * Check if commitment exists
+   */
+  async commitmentExists(commitment: string): Promise<boolean> {
+    await this.ensureInitialized();
+    return await this.contract.commitmentExists(commitment);
+  }
+
+  /**
+   * Check if nullifier has been used
+   */
+  async nullifierUsed(nullifier: string): Promise<boolean> {
+    await this.ensureInitialized();
+    return await this.contract.nullifierUsed(nullifier);
   }
 
   /**

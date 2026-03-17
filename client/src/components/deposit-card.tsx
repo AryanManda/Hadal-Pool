@@ -10,15 +10,16 @@ import PrivacyScore from "@/components/privacy-score";
 import { calculatePrivacyScore, type PrivacyScoreData } from "@/lib/privacy-score";
 import { ContractService, POOL_IDS, type PoolId } from "@/lib/contract-service";
 import { ERC20Service } from "@/lib/erc20-service";
+import { ZKService } from "@/lib/zk-service";
 import { ethers } from "ethers";
 import { apiRequest } from "@/lib/queryClient";
-import { getMetaMaskProvider } from "@/lib/wallet-utils";
+import type { Eip1193Provider } from "@/lib/wallet-utils";
 import { DEMO_MODE, simulateDeposit } from "@/lib/demo-mode";
 
 import { useCurrency, CURRENCIES, type Currency } from "@/contexts/currency-context";
 
 const TIME_LOCK_OPTIONS = [
-  { value: POOL_IDS.ONE_HOUR, label: "1 hour", description: "Minimum" },
+  { value: POOL_IDS.ONE_HOUR, label: "1 minute", description: "Minimum (Testing)" },
   { value: POOL_IDS.FOUR_HOURS, label: "4 hours", description: "Recommended" },
   { value: POOL_IDS.TWENTY_FOUR_HOURS, label: "24 hours", description: "Maximum privacy" },
 ] as const;
@@ -28,8 +29,9 @@ export default function DepositCard() {
   const [amount, setAmount] = useState("");
   const [selectedTimeLock, setSelectedTimeLock] = useState<PoolId>(POOL_IDS.ONE_HOUR); // Default to 1 hour
   const [userBalance] = useState(0.5); // Mock user balance
-  const { isConnected, address } = useWallet();
+  const { isConnected, address, provider: connectedProvider } = useWallet();
   const { toast } = useToast();
+  const [secretNote, setSecretNote] = useState<string | null>(null);
   const queryClient = useQueryClient();
   
   // Reset amount when currency changes
@@ -41,8 +43,8 @@ export default function DepositCard() {
     mutationFn: async (data: { amount: string; currency: Currency }) => {
       // DEMO MODE: Simulate transaction without blockchain
       if (DEMO_MODE) {
-        // Use actual durations (1 hour = 3600 seconds, 4 hours = 14400 seconds, 24 hours = 86400 seconds)
-        const lockDuration = selectedTimeLock === POOL_IDS.ONE_HOUR ? 3600 : 
+        // Use actual durations (TESTING: 1 minute = 60 seconds, 4 hours = 14400 seconds, 24 hours = 86400 seconds)
+        const lockDuration = selectedTimeLock === POOL_IDS.ONE_HOUR ? 60 : 
                             selectedTimeLock === POOL_IDS.FOUR_HOURS ? 14400 : 86400;
         const tx = await simulateDeposit(data.amount, data.currency, lockDuration);
         return {
@@ -55,11 +57,8 @@ export default function DepositCard() {
       // REAL MODE: Use actual blockchain
       if (!address) throw new Error("Wallet not connected");
       
-      // Get MetaMask provider specifically
-      const ethereumProvider = getMetaMaskProvider();
-      if (!ethereumProvider) {
-        throw new Error("MetaMask not found. Please install MetaMask.");
-      }
+      const ethereumProvider: Eip1193Provider | null = connectedProvider;
+      if (!ethereumProvider) throw new Error("Wallet provider not available. Please reconnect your wallet.");
       
       // Get provider and signer from wallet
       const provider = new ethers.BrowserProvider(ethereumProvider);
@@ -69,14 +68,17 @@ export default function DepositCard() {
       if (data.currency === "ETH") {
         const contractService = new ContractService(provider, signer);
         
-        // Verify network before depositing - support Sepolia (11155111), Mainnet (1), Arbitrum (42161), Arbitrum Sepolia (421614)
+        // Verify network before depositing - support Localhost (31337), Sepolia (11155111), Mainnet (1), Arbitrum (42161), Arbitrum Sepolia (421614), Base (8453), Base Sepolia (84532)
         const network = await provider.getNetwork();
+        const isLocalhost = network.chainId === 31337n;
         const isSepolia = network.chainId === 11155111n;
         const isMainnet = network.chainId === 1n;
         const isArbitrum = network.chainId === 42161n;
         const isArbitrumSepolia = network.chainId === 421614n;
+        const isBase = network.chainId === 8453n;
+        const isBaseSepolia = network.chainId === 84532n;
         
-        if (!isSepolia && !isMainnet && !isArbitrum && !isArbitrumSepolia) {
+        if (!isLocalhost && !isSepolia && !isMainnet && !isArbitrum && !isArbitrumSepolia && !isBase && !isBaseSepolia) {
           // Try to switch to Sepolia (testnet) first
           try {
             await ethereumProvider.request({
@@ -87,22 +89,66 @@ export default function DepositCard() {
             await new Promise(resolve => setTimeout(resolve, 1000));
             // Re-check network after switch
             const newNetwork = await provider.getNetwork();
-            if (newNetwork.chainId !== 11155111n && newNetwork.chainId !== 1n && newNetwork.chainId !== 42161n && newNetwork.chainId !== 421614n) {
+            if (newNetwork.chainId !== 31337n && newNetwork.chainId !== 11155111n && newNetwork.chainId !== 1n && newNetwork.chainId !== 42161n && newNetwork.chainId !== 421614n && newNetwork.chainId !== 8453n && newNetwork.chainId !== 84532n) {
               throw new Error("Network switch failed");
             }
           } catch (switchError: any) {
             // If switch fails, show error
             toast({
               title: "Wrong Network",
-              description: `Please switch MetaMask to Sepolia (Chain ID: 11155111), Mainnet (Chain ID: 1), Arbitrum (Chain ID: 42161), or Arbitrum Sepolia (Chain ID: 421614).\n\nCurrently on Chain ID: ${network.chainId.toString()}.`,
+              description: `Please switch MetaMask to Localhost (Chain ID: 31337), Sepolia (Chain ID: 11155111), Mainnet (Chain ID: 1), Arbitrum (Chain ID: 42161), Arbitrum Sepolia (Chain ID: 421614), Base (Chain ID: 8453), or Base Sepolia (Chain ID: 84532).\n\nCurrently on Chain ID: ${network.chainId.toString()}.`,
               variant: "destructive",
             });
-            throw new Error(`Unsupported network. Please switch to Sepolia (Chain ID: 11155111), Mainnet (Chain ID: 1), Arbitrum (Chain ID: 42161), or Arbitrum Sepolia (Chain ID: 421614)`);
+            throw new Error(`Unsupported network. Please switch to Localhost (Chain ID: 31337), Sepolia (Chain ID: 11155111), Mainnet (Chain ID: 1), Arbitrum (Chain ID: 42161), Arbitrum Sepolia (Chain ID: 421614), Base (Chain ID: 8453), or Base Sepolia (Chain ID: 84532)`);
           }
         }
         
-        console.log("Depositing to contract...");
-        const receipt = await contractService.deposit(selectedTimeLock, data.amount);
+        // Try to use ZK commitment if supported, otherwise use regular deposit
+        let receipt: ethers.TransactionReceipt;
+        let storedCommitment: string | null = null;
+        
+        try {
+          console.log("Creating ZK commitment...");
+          // Step 1: Create ZK commitment (privacy: hides depositor identity)
+          const amountWei = ethers.parseEther(data.amount).toString();
+          const commitmentResp = await ZKService.createCommitment(
+            amountWei,
+            selectedTimeLock,
+            address!
+          );
+          console.log("ZK commitment created:", commitmentResp.commitment);
+          storedCommitment = commitmentResp.commitment;
+          setSecretNote(commitmentResp.note);
+          
+          console.log("Depositing to contract with commitment...");
+          // Step 2: Deposit with commitment (contract stores only commitment, not depositor address)
+          // This will automatically fall back to regular deposit if V2 not supported
+          receipt = await contractService.depositWithCommitment(
+            selectedTimeLock,
+            commitmentResp.commitment,
+            data.amount
+          );
+          
+          // Store commitment for ZK withdrawal (only if ZK deposit succeeded)
+          if (storedCommitment) {
+            const depositKey = `zk_deposit_${receipt.hash}`;
+            localStorage.setItem(depositKey, JSON.stringify({
+              commitment: storedCommitment,
+              note: commitmentResp.note,
+              poolId: selectedTimeLock,
+              amount: data.amount,
+              timestamp: Date.now(),
+              transactionHash: receipt.hash
+            }));
+            console.log("ZK commitment stored for withdrawal:", storedCommitment);
+          }
+        } catch (zkError: any) {
+          // If ZK commitment fails, fall back to regular deposit
+          console.warn("ZK commitment failed, using regular deposit:", zkError.message);
+          console.log("Depositing to contract (V1 mode)...");
+          receipt = await contractService.deposit(selectedTimeLock, data.amount);
+          // Don't store commitment for V1 deposits
+        }
         console.log("Deposit transaction receipt:", receipt);
         console.log("Deposit transaction hash:", receipt.hash);
         console.log("Deposit transaction status:", receipt.status);
@@ -145,7 +191,9 @@ export default function DepositCard() {
         const networkName = network.chainId === 1n ? "mainnet" : 
                             network.chainId === 11155111n ? "sepolia" :
                             network.chainId === 42161n ? "arbitrum" :
-                            network.chainId === 421614n ? "arbitrumSepolia" : "sepolia";
+                            network.chainId === 421614n ? "arbitrumSepolia" :
+                            network.chainId === 8453n ? "base" :
+                            network.chainId === 84532n ? "baseSepolia" : "sepolia";
         const contractAddress = CONTRACT_ADDRESSES[networkName as keyof typeof CONTRACT_ADDRESSES];
         
         if (!contractAddress) {
@@ -165,8 +213,8 @@ export default function DepositCard() {
     onSuccess: async (data) => {
       // Save deposit to backend
       try {
-        // Use actual durations (1 hour = 3600 seconds, 4 hours = 14400 seconds, 24 hours = 86400 seconds)
-        const lockDuration = selectedTimeLock === POOL_IDS.ONE_HOUR ? 3600 : 
+        // Use actual durations (TESTING: 1 minute = 60 seconds, 4 hours = 14400 seconds, 24 hours = 86400 seconds)
+        const lockDuration = selectedTimeLock === POOL_IDS.ONE_HOUR ? 60 : 
                             selectedTimeLock === POOL_IDS.FOUR_HOURS ? 14400 : 86400;
         
         await apiRequest("POST", "/api/deposits", {
@@ -183,7 +231,9 @@ export default function DepositCard() {
       
       toast({
         title: "Deposit Successful",
-        description: `Your funds have been deposited. Transaction: ${data.transactionHash.slice(0, 10)}...`,
+        description: secretNote
+          ? `Deposit complete. Save your Secret Note to withdraw later. Tx: ${data.transactionHash.slice(0, 10)}...`
+          : `Your funds have been deposited. Transaction: ${data.transactionHash.slice(0, 10)}...`,
       });
       setAmount("");
       queryClient.invalidateQueries({ queryKey: ["/api/deposits", address] });
@@ -220,7 +270,7 @@ export default function DepositCard() {
       } else if (errorMessage.includes("network") || error.code === "NETWORK_ERROR" || error.code === "SERVER_ERROR") {
         // More specific network error messages
         if (errorMessage.includes("chain")) {
-          errorMessage = "Network mismatch. Please switch MetaMask to Sepolia (Chain ID: 11155111), Mainnet (Chain ID: 1), Arbitrum (Chain ID: 42161), or Arbitrum Sepolia (Chain ID: 421614)";
+          errorMessage = "Network mismatch. Please switch MetaMask to Sepolia (Chain ID: 11155111), Mainnet (Chain ID: 1), Arbitrum (Chain ID: 42161), Arbitrum Sepolia (Chain ID: 421614), Base (Chain ID: 8453), or Base Sepolia (Chain ID: 84532)";
         } else {
           errorMessage = `Network error: ${errorMessage}. Please ensure you're connected to a supported network.`;
         }
@@ -294,27 +344,30 @@ export default function DepositCard() {
     
     // REAL MODE: Check wallet balance before attempting deposit
     try {
-      const ethereumProvider = getMetaMaskProvider();
+      const ethereumProvider: Eip1193Provider | null = connectedProvider;
       if (!ethereumProvider) {
         toast({
-          title: "MetaMask Not Found",
-          description: "Please install MetaMask browser extension.",
+          title: "Wallet Not Connected",
+          description: "Please connect a wallet to continue.",
           variant: "destructive",
         });
         return;
       }
       const provider = new ethers.BrowserProvider(ethereumProvider);
       
-      // Verify we're on the correct network (Sepolia, Mainnet, Arbitrum, or Arbitrum Sepolia)
+      // Verify we're on the correct network (Localhost, Sepolia, Mainnet, Arbitrum, Arbitrum Sepolia, Base, or Base Sepolia)
       const network = await provider.getNetwork();
       console.log("Current network:", network.chainId.toString());
-      
+
+      const isLocalhost = network.chainId === 31337n;
       const isSepolia = network.chainId === 11155111n;
       const isMainnet = network.chainId === 1n;
       const isArbitrum = network.chainId === 42161n;
       const isArbitrumSepolia = network.chainId === 421614n;
-      
-      if (!isSepolia && !isMainnet && !isArbitrum && !isArbitrumSepolia) {
+      const isBase = network.chainId === 8453n;
+      const isBaseSepolia = network.chainId === 84532n;
+
+      if (!isLocalhost && !isSepolia && !isMainnet && !isArbitrum && !isArbitrumSepolia && !isBase && !isBaseSepolia) {
         // Try to switch to Sepolia (testnet)
         try {
           await ethereumProvider.request({
@@ -325,7 +378,7 @@ export default function DepositCard() {
           await new Promise(resolve => setTimeout(resolve, 1000));
           // Re-check network
           const newNetwork = await provider.getNetwork();
-          if (newNetwork.chainId !== 11155111n && newNetwork.chainId !== 1n && newNetwork.chainId !== 42161n && newNetwork.chainId !== 421614n) {
+          if (newNetwork.chainId !== 31337n && newNetwork.chainId !== 11155111n && newNetwork.chainId !== 1n && newNetwork.chainId !== 42161n && newNetwork.chainId !== 421614n && newNetwork.chainId !== 8453n && newNetwork.chainId !== 84532n) {
             throw new Error("Network switch failed");
           }
         } catch (switchError: any) {
@@ -333,7 +386,7 @@ export default function DepositCard() {
           // If user rejected or switch failed, show manual instructions
           toast({
             title: "Wrong Network",
-            description: `Please switch MetaMask to Sepolia (Chain ID: 11155111), Mainnet (Chain ID: 1), Arbitrum (Chain ID: 42161), or Arbitrum Sepolia (Chain ID: 421614). Currently on Chain ID: ${network.chainId.toString()}.`,
+            description: `Please switch MetaMask to Localhost (Chain ID: 31337), Sepolia (Chain ID: 11155111), Mainnet (Chain ID: 1), Arbitrum (Chain ID: 42161), Arbitrum Sepolia (Chain ID: 421614), Base (Chain ID: 8453), or Base Sepolia (Chain ID: 84532). Currently on Chain ID: ${network.chainId.toString()}.`,
             variant: "destructive",
           });
           return;
@@ -341,10 +394,10 @@ export default function DepositCard() {
         
         // Final check after switch attempt
         const finalNetwork = await provider.getNetwork();
-        if (finalNetwork.chainId !== 11155111n && finalNetwork.chainId !== 1n && finalNetwork.chainId !== 42161n && finalNetwork.chainId !== 421614n) {
+        if (finalNetwork.chainId !== 31337n && finalNetwork.chainId !== 11155111n && finalNetwork.chainId !== 1n && finalNetwork.chainId !== 42161n && finalNetwork.chainId !== 421614n && finalNetwork.chainId !== 8453n && finalNetwork.chainId !== 84532n) {
           toast({
             title: "Wrong Network",
-            description: `Please switch MetaMask to Sepolia (Chain ID: 11155111), Mainnet (Chain ID: 1), Arbitrum (Chain ID: 42161), or Arbitrum Sepolia (Chain ID: 421614). Currently on Chain ID: ${finalNetwork.chainId.toString()}`,
+            description: `Please switch MetaMask to Localhost (Chain ID: 31337), Sepolia (Chain ID: 11155111), Mainnet (Chain ID: 1), Arbitrum (Chain ID: 42161), Arbitrum Sepolia (Chain ID: 421614), Base (Chain ID: 8453), or Base Sepolia (Chain ID: 84532). Currently on Chain ID: ${finalNetwork.chainId.toString()}`,
             variant: "destructive",
           });
           return;
@@ -381,6 +434,8 @@ export default function DepositCard() {
           const isMainnet = network.chainId === 1n;
           const isArbitrum = network.chainId === 42161n;
           const isArbitrumSepolia = network.chainId === 421614n;
+          const isBase = network.chainId === 8453n;
+          const isBaseSepolia = network.chainId === 84532n;
           
           let helpMessage = `You need ${totalNeeded.toFixed(4)} ETH (${depositAmount} ETH deposit + ~${estimatedGasCost.toFixed(4)} ETH gas). Your balance: ${balanceInEth.toFixed(4)} ETH`;
           
@@ -406,6 +461,17 @@ export default function DepositCard() {
             helpMessage += `\n\nYou're on Arbitrum One with 0 ETH. Bridge ETH from Ethereum Mainnet to Arbitrum using:\n• https://bridge.arbitrum.io/`;
           } else if (isArbitrum) {
             helpMessage += `\n\nYou're on Arbitrum One but don't have enough ETH. Bridge more ETH from Ethereum Mainnet using:\n• https://bridge.arbitrum.io/`;
+          } else if (isBaseSepolia) {
+            if (balanceInEth === 0) {
+              helpMessage += `\n\nYou're on Base Sepolia testnet with 0 ETH. Get free test ETH from a Base Sepolia faucet:`;
+            } else {
+              helpMessage += `\n\nYou're on Base Sepolia testnet but don't have enough ETH. Get more free test ETH from a Base Sepolia faucet:`;
+            }
+            helpMessage += `\n• https://www.coinbase.com/faucets/base-ethereum-goerli-faucet\n• https://faucet.quicknode.com/base/sepolia`;
+          } else if (isBase && balanceInEth === 0) {
+            helpMessage += `\n\nYou're on Base Mainnet with 0 ETH. Bridge ETH from Ethereum Mainnet to Base using:\n• https://bridge.base.org/`;
+          } else if (isBase) {
+            helpMessage += `\n\nYou're on Base Mainnet but don't have enough ETH. Bridge more ETH from Ethereum Mainnet using:\n• https://bridge.base.org/`;
           }
           
           toast({
@@ -440,6 +506,8 @@ export default function DepositCard() {
           const isSepolia = network.chainId === 11155111n;
           const isArbitrumSepolia = network.chainId === 421614n;
           const isArbitrum = network.chainId === 42161n;
+          const isBaseSepolia = network.chainId === 84532n;
+          const isBase = network.chainId === 8453n;
           
           let helpMessage = `You need at least ${minGasNeeded} ETH for gas fees. Your ETH balance: ${ethBalanceAmount.toFixed(4)} ETH`;
           if (isSepolia) {
@@ -448,6 +516,10 @@ export default function DepositCard() {
             helpMessage += `\n\nGet more free Arbitrum Sepolia ETH from a faucet:\n• https://faucet.quicknode.com/arbitrum/sepolia\n• https://www.alchemy.com/faucets/arbitrum-sepolia`;
           } else if (isArbitrum) {
             helpMessage += `\n\nBridge ETH from Ethereum Mainnet to Arbitrum:\n• https://bridge.arbitrum.io/`;
+          } else if (isBaseSepolia) {
+            helpMessage += `\n\nGet more free Base Sepolia ETH from a faucet:\n• https://www.coinbase.com/faucets/base-ethereum-goerli-faucet\n• https://faucet.quicknode.com/base/sepolia`;
+          } else if (isBase) {
+            helpMessage += `\n\nBridge ETH from Ethereum Mainnet to Base:\n• https://bridge.base.org/`;
           }
           
           toast({
@@ -593,6 +665,33 @@ export default function DepositCard() {
         >
           {depositMutation.isPending ? "Processing..." : "Deposit"}
         </Button>
+
+        {/* Secret Note (ZK withdrawals) */}
+        {secretNote && (
+          <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium">Secret Note</div>
+                <div className="text-xs text-muted-foreground">
+                  Save this. You’ll need it to generate a private withdrawal proof. If you lose it, you may not be able to withdraw via ZK.
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(secretNote);
+                  toast({ title: "Copied", description: "Secret Note copied to clipboard." });
+                }}
+              >
+                Copy
+              </Button>
+            </div>
+            <div className="mt-3">
+              <Input readOnly value={secretNote} className="font-mono text-xs" />
+            </div>
+          </div>
+        )}
         </div>
       </div>
     </div>

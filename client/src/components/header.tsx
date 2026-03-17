@@ -15,7 +15,7 @@ export default function Header() {
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                 <i className="fas fa-shield-alt text-primary-foreground text-sm"></i>
               </div>
-              <h1 className="text-lg font-semibold">Hadal Pool</h1>
+              <h1 className="text-lg font-semibold">Hadal</h1>
             </Link>
             {location === "/app" && (
               <Link href="/">

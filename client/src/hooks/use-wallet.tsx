@@ -1,11 +1,13 @@
 import { useState, useEffect, createContext, useContext } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { getMetaMaskProvider } from "@/lib/wallet-utils";
+import { getCoinbaseProvider, getMetaMaskProvider, getWalletConnectProvider, type Eip1193Provider } from "@/lib/wallet-utils";
 import { DEMO_MODE, generateFakeAddress } from "@/lib/demo-mode";
 
 interface WalletContextType {
   isConnected: boolean;
   address: string | null;
+  provider: Eip1193Provider | null;
+  walletType: "metamask" | "walletconnect" | "coinbase" | null;
   connect: (walletType?: string) => Promise<void>;
   disconnect: () => void;
 }
@@ -15,6 +17,8 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
+  const [provider, setProvider] = useState<Eip1193Provider | null>(null);
+  const [walletType, setWalletType] = useState<WalletContextType["walletType"]>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -32,14 +36,31 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const checkConnection = async () => {
     if (DEMO_MODE) return; // Skip in demo mode
-    
-    const provider = getMetaMaskProvider();
-    if (provider) {
+
+    // Try restoring last used wallet type
+    const lastType = (localStorage.getItem("walletType") as WalletContextType["walletType"]) || "metamask";
+
+    let p: Eip1193Provider | null = null;
+    try {
+      if (lastType === "walletconnect") {
+        p = await getWalletConnectProvider();
+      } else if (lastType === "coinbase") {
+        p = getCoinbaseProvider();
+      } else {
+        p = getMetaMaskProvider();
+      }
+    } catch (e) {
+      p = getMetaMaskProvider();
+    }
+
+    if (p) {
       try {
-        const accounts = await provider.request({ method: "eth_accounts" });
+        const accounts = await p.request({ method: "eth_accounts" });
         if (accounts.length > 0) {
           setAddress(accounts[0]);
           setIsConnected(true);
+          setProvider(p);
+          setWalletType(lastType || "metamask");
         }
       } catch (error) {
         console.error("Failed to check wallet connection:", error);
@@ -60,35 +81,53 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     
-    // REAL MODE: Connect to MetaMask
-    const provider = getMetaMaskProvider();
-    
-    if (!provider) {
-      toast({
-        title: "MetaMask Not Found",
-        description: "Please install MetaMask browser extension to continue.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
-      const accounts = await provider.request({
-        method: "eth_requestAccounts",
-      });
+      let p: Eip1193Provider | null = null;
+
+      if (walletType === "walletconnect") {
+        p = await getWalletConnectProvider();
+      } else if (walletType === "coinbase") {
+        p = getCoinbaseProvider();
+      } else {
+        p = getMetaMaskProvider();
+      }
+
+      if (!p) {
+        toast({
+          title: "Wallet Not Found",
+          description:
+            walletType === "metamask"
+              ? "Please install MetaMask browser extension to continue."
+              : walletType === "coinbase"
+                ? "Could not initialize Coinbase Wallet. Please try again."
+                : "Could not initialize WalletConnect. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const accounts = await p.request({ method: "eth_requestAccounts" });
 
       if (accounts.length > 0) {
         setAddress(accounts[0]);
         setIsConnected(true);
+        setProvider(p);
+        setWalletType(walletType as WalletContextType["walletType"]);
+        localStorage.setItem("walletType", walletType);
         toast({
-          title: "MetaMask Connected",
+          title:
+            walletType === "walletconnect"
+              ? "WalletConnect Connected"
+              : walletType === "coinbase"
+                ? "Coinbase Wallet Connected"
+                : "MetaMask Connected",
           description: `Connected to ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`,
         });
       }
     } catch (error: any) {
       toast({
         title: "Connection Failed",
-        description: error.message || "Failed to connect MetaMask",
+        description: error.message || "Failed to connect wallet",
         variant: "destructive",
       });
     }
@@ -97,6 +136,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const disconnect = () => {
     setAddress(null);
     setIsConnected(false);
+    setProvider(null);
+    setWalletType(null);
     toast({
       title: "Wallet Disconnected",
       description: "Your wallet has been disconnected.",
@@ -104,7 +145,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <WalletContext.Provider value={{ isConnected, address, connect, disconnect }}>
+    <WalletContext.Provider value={{ isConnected, address, provider, walletType, connect, disconnect }}>
       {children}
     </WalletContext.Provider>
   );

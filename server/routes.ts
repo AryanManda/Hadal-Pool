@@ -114,6 +114,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create ZK commitment for deposit
+  app.post("/api/zk/commitment/create", async (req, res) => {
+    try {
+      const { amount, poolId, depositorAddress } = req.body;
+      
+      if (!amount || poolId === undefined || !depositorAddress) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      const { zkProofService } = await import("./services/zk-proof-service.js");
+      const commitment = await zkProofService.createCommitment(amount, poolId, depositorAddress);
+      
+      res.json({
+        commitment: commitment.commitment,
+        note: commitment.note,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message || "Failed to create commitment" });
+    }
+  });
+
+  // Generate ZK proof for withdrawal
+  app.post("/api/zk/proof/generate", async (req, res) => {
+    try {
+      const { commitment, note, recipient, amount, lockDuration } = req.body;
+      
+      // commitment is kept for backward compatibility; preferred input is note
+      if ((!note && !commitment) || !recipient || !amount || lockDuration === undefined) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      const { zkProofService } = await import("./services/zk-proof-service.js");
+      const proof = await zkProofService.generateProofFromNoteOrCommitment(note || commitment, recipient, amount, lockDuration);
+      
+      res.json(proof);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message || "Failed to generate proof" });
+    }
+  });
+
   // Process withdrawal
   app.post("/api/withdrawals", async (req, res) => {
     try {

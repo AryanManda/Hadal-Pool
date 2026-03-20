@@ -106,6 +106,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      // WalletConnect provider requires establishing a WC session before request()
+      if (walletType === "walletconnect" && typeof (p as any).connect === "function") {
+        await (p as any).connect();
+      }
+
       const accounts = await p.request({ method: "eth_requestAccounts" });
 
       if (accounts.length > 0) {

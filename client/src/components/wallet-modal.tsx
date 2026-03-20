@@ -27,7 +27,7 @@ export default function WalletModal() {
       </Button>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="glass-effect border-border max-w-md">
+        <DialogContent className="glass-effect border-border max-w-md fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">Connect Wallet</DialogTitle>
           </DialogHeader>

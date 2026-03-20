@@ -437,41 +437,17 @@ export default function DepositCard() {
           const isBase = network.chainId === 8453n;
           const isBaseSepolia = network.chainId === 84532n;
           
-          let helpMessage = `You need ${totalNeeded.toFixed(4)} ETH (${depositAmount} ETH deposit + ~${estimatedGasCost.toFixed(4)} ETH gas). Your balance: ${balanceInEth.toFixed(4)} ETH`;
-          
-          if (isSepolia) {
+          let helpMessage = `You need ${totalNeeded.toFixed(4)} ETH (${depositAmount} ETH deposit + ~${estimatedGasCost.toFixed(4)} ETH gas). Your balance: ${balanceInEth.toFixed(4)} ETH.`;
+
+          // Production focus: Base Mainnet only
+          if (isBase) {
             if (balanceInEth === 0) {
-              helpMessage += `\n\nYou're on Sepolia testnet with 0 ETH. Get free test ETH from a Sepolia faucet:`;
+              helpMessage += `\n\nYou're on Base Mainnet with 0 ETH. Bridge ETH from Ethereum Mainnet to Base:\n• https://bridge.base.org/`;
             } else {
-              helpMessage += `\n\nYou're on Sepolia testnet but don't have enough ETH. Get more free test ETH from a Sepolia faucet:`;
+              helpMessage += `\n\nYou're on Base Mainnet but don't have enough ETH. Bridge more ETH from Ethereum Mainnet using:\n• https://bridge.base.org/`;
             }
-            helpMessage += `\n• https://sepoliafaucet.com/\n• https://faucet.quicknode.com/ethereum/sepolia\n• https://www.alchemy.com/faucets/ethereum-sepolia\n• https://sepolia-faucet.pk910.de/`;
-          } else if (isArbitrumSepolia) {
-            if (balanceInEth === 0) {
-              helpMessage += `\n\nYou're on Arbitrum Sepolia testnet with 0 ETH. Get free test ETH from an Arbitrum Sepolia faucet:`;
-            } else {
-              helpMessage += `\n\nYou're on Arbitrum Sepolia testnet but don't have enough ETH. Get more free test ETH from an Arbitrum Sepolia faucet:`;
-            }
-            helpMessage += `\n• https://faucet.quicknode.com/arbitrum/sepolia\n• https://www.alchemy.com/faucets/arbitrum-sepolia`;
-          } else if (isMainnet && balanceInEth === 0) {
-            helpMessage += `\n\nYou're on Ethereum Mainnet with 0 ETH. You need to purchase ETH from an exchange to use on Mainnet.`;
-          } else if (isMainnet) {
-            helpMessage += `\n\nYou're on Ethereum Mainnet but don't have enough ETH. You need to purchase more ETH from an exchange.`;
-          } else if (isArbitrum && balanceInEth === 0) {
-            helpMessage += `\n\nYou're on Arbitrum One with 0 ETH. Bridge ETH from Ethereum Mainnet to Arbitrum using:\n• https://bridge.arbitrum.io/`;
-          } else if (isArbitrum) {
-            helpMessage += `\n\nYou're on Arbitrum One but don't have enough ETH. Bridge more ETH from Ethereum Mainnet using:\n• https://bridge.arbitrum.io/`;
-          } else if (isBaseSepolia) {
-            if (balanceInEth === 0) {
-              helpMessage += `\n\nYou're on Base Sepolia testnet with 0 ETH. Get free test ETH from a Base Sepolia faucet:`;
-            } else {
-              helpMessage += `\n\nYou're on Base Sepolia testnet but don't have enough ETH. Get more free test ETH from a Base Sepolia faucet:`;
-            }
-            helpMessage += `\n• https://www.coinbase.com/faucets/base-ethereum-goerli-faucet\n• https://faucet.quicknode.com/base/sepolia`;
-          } else if (isBase && balanceInEth === 0) {
-            helpMessage += `\n\nYou're on Base Mainnet with 0 ETH. Bridge ETH from Ethereum Mainnet to Base using:\n• https://bridge.base.org/`;
-          } else if (isBase) {
-            helpMessage += `\n\nYou're on Base Mainnet but don't have enough ETH. Bridge more ETH from Ethereum Mainnet using:\n• https://bridge.base.org/`;
+          } else {
+            helpMessage += `\n\nYou're currently on a different network. Please switch your wallet to Base Mainnet (chain ID 8453) and ensure you have at least ${totalNeeded.toFixed(4)} ETH on Base.`;
           }
           
           toast({

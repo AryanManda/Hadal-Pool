@@ -1,9 +1,10 @@
 import { Link, useLocation } from "wouter";
 import { useWallet } from "@/hooks/use-wallet";
 import { Button } from "@/components/ui/button";
+import WalletModal from "@/components/wallet-modal";
 
 export default function Header() {
-  const { isConnected, address, connect, disconnect } = useWallet();
+  const { isConnected, address, disconnect } = useWallet();
   const [location] = useLocation();
 
   return (
@@ -27,13 +28,17 @@ export default function Header() {
           </div>
           
           <div className="flex items-center space-x-3">
-            <button 
-              onClick={() => isConnected ? disconnect() : connect()}
-              className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-              data-testid="button-connect-wallet"
-            >
-              {isConnected ? `${address?.slice(0, 6)}...${address?.slice(-4)}` : "Connect Wallet"}
-            </button>
+            {isConnected ? (
+              <button
+                onClick={() => disconnect()}
+                className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+                data-testid="button-connect-wallet"
+              >
+                {`${address?.slice(0, 6)}...${address?.slice(-4)}`}
+              </button>
+            ) : (
+              <WalletModal />
+            )}
           </div>
         </div>
       </div>

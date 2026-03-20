@@ -62,9 +62,9 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
-  // Let Node bind on all interfaces by default (Render requires this)
-  server.listen(port, () => {
-    log(`serving on port ${port}`);
+  // Render's port detector expects the server to bind to 0.0.0.0.
+  server.listen(port, "0.0.0.0", () => {
+    log(`serving on port ${port} (host 0.0.0.0)`);
   });
 
   // Handle uncaught exceptions to prevent crashes

@@ -30,7 +30,7 @@ export default function PrivacyFundInfo() {
             </li>
             <li className="flex items-center space-x-2">
               <i className="fas fa-check text-primary text-xs"></i>
-              <span>Growing the anonymity set for better privacy protection</span>
+              <span>Supporting the collective liquidity set for stronger obfuscation</span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 italic">

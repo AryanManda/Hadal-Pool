@@ -17,9 +17,9 @@ export default function PrivacyWarning() {
       <div className="flex items-start space-x-3">
         <i className="fas fa-exclamation-triangle text-amber-500 mt-1"></i>
         <div>
-          <h3 className="text-amber-500 font-medium mb-1">Low Anonymity Set Warning</h3>
+          <h3 className="text-amber-500 font-medium mb-1">Low liquidity set warning</h3>
           <p className="text-sm text-muted-foreground">
-            Current anonymity set: <span className="font-mono" data-testid="text-anonymity-count">{anonymitySetSize} deposits</span>. For better privacy, consider waiting for more users to join the pool.
+            Current liquidity set: <span className="font-mono" data-testid="text-anonymity-count">{anonymitySetSize} deposits</span>. For stronger obfuscation, consider waiting for more activity in the pool.
           </p>
         </div>
       </div>

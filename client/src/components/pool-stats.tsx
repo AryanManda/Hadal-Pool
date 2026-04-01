@@ -29,7 +29,7 @@ export default function PoolStats() {
           <div className="text-xl font-semibold text-accent" data-testid="text-anonymity-set">
             {poolStats?.anonymitySetSize || "0"}
           </div>
-          <div className="text-xs text-muted-foreground mt-1">Anonymity Set</div>
+          <div className="text-xs text-muted-foreground mt-1">Shared liquidity set</div>
         </div>
         
         <div className="bg-card border border-border rounded-lg p-4 text-center">
